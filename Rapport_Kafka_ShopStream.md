@@ -62,6 +62,15 @@ Le diagramme ci-dessous illustre l'« architecture spaghetti » typique de l'int
 
 ```mermaid
 flowchart LR
+    subgraph APRES["Après : bus d'événements Kafka"]
+        direction LR
+        C1[Commandes] --> K[(Kafka)]
+        C2[Paiements] --> K
+        C3[Logistique] --> K
+        K --> D1[Fraude]
+        K --> D2[Stock]
+        K --> D3[Analytique]
+    end
     subgraph AVANT["Avant : intégration point à point"]
         direction LR
         A1[Commandes] --> B1[Fraude]
@@ -71,15 +80,6 @@ flowchart LR
         A2 --> B3
         A3[Logistique] --> B2
         A3 --> B3
-    end
-    subgraph APRES["Après : bus d'événements Kafka"]
-        direction LR
-        C1[Commandes] --> K[(Kafka)]
-        C2[Paiements] --> K
-        C3[Logistique] --> K
-        K --> D1[Fraude]
-        K --> D2[Stock]
-        K --> D3[Analytique]
     end
 ```
 
@@ -476,7 +476,7 @@ Ce scénario reprend fidèlement l'application illustrative du PDF (« configure
 ### 6.1 Pipeline de données pratique
 
 ```mermaid
-flowchart LR
+flowchart TB
     G["Générateur de commandes<br/>order_producer.py"] -- "OrderCreated JSON<br/>clé = customer_id" --> T1[["orders.created<br/>P0..P5"]]
     T1 -- "groupe fraud-detection" --> F["fraud_detector.py<br/>R1, R2, R3"]
     T1 -- "groupe analytics" --> A["revenue_analytics.py<br/>fenêtres 30 s"]
@@ -556,7 +556,7 @@ Exemple d'événement `OrderCreated` :
 ### 6.3 Topologie de déploiement
 
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph HOST["Machine hôte (Windows / macOS / Linux)"]
         PY["Applications Python<br/>producteur + consommateurs<br/>bootstrap = localhost:29092,39092,49092"]
         NAV["Navigateur<br/>http://localhost:8080"]
