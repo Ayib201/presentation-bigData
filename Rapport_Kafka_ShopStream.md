@@ -686,6 +686,8 @@ Les trois programmes utilisent la bibliothèque `confluent-kafka` (client offici
 
 ## 8. Mise en œuvre pas à pas
 
+> **Captures d'écran.** Les figures de cette partie proviennent de l'exécution réelle du protocole sur la machine de l'auteur. Les pages de Kafka UI sont des captures directes du navigateur. Les figures de terminal reproduisent les sorties réelles des commandes et des programmes (journaux conservés lors de l'exécution), mises en forme dans une fenêtre de terminal ; les lignes en gris italique commençant par `#` sont des annotations ajoutées pour situer les événements (horodatages issus de `docker events`).
+
 > **Convention.** Les commandes `docker ...` et `python ...` sont exécutées sur la machine hôte (PowerShell sous Windows, terminal sous macOS/Linux), depuis le dossier `kafka-shopstream/`. Les commandes `kafka-*.sh` sont exécutées **dans** un conteneur via `docker exec`. Il est recommandé d'ouvrir **4 à 5 terminaux** côte à côte pour les étapes 5 à 8.
 
 ### Étape 1 — Démarrage du cluster
@@ -706,9 +708,13 @@ docker logs kafka1 2>&1 | Select-String -Pattern "leader" | Select-Object -Last 
 
 (Sous Linux/macOS : `docker logs kafka1 2>&1 | grep "Kafka Server started"`.)
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : sortie de `docker compose ps` montrant les 4 conteneurs `kafka1`, `kafka2`, `kafka3` et `kafka-ui` à l'état `running`/`Up`, avec les ports 29092, 39092, 49092 et 8080 publiés.]**
+![Figure 1 — Conteneurs du cluster en fonctionnement (`docker compose ps`) : 3 brokers et Kafka UI, ports 29092, 39092, 49092 et 8080 publiés.](captures/01_docker_compose_ps.png)
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : extrait de `docker logs kafka1` contenant la ligne `[KafkaRaftServer nodeId=1] Kafka Server started`.]**
+*Figure 1 — Conteneurs du cluster en fonctionnement (`docker compose ps`) : 3 brokers et Kafka UI, ports 29092, 39092, 49092 et 8080 publiés.*
+
+![Figure 2 — Démarrage du nœud 1 en mode KRaft (`Kafka Server started`).](captures/02_kafka_server_started.png)
+
+*Figure 2 — Démarrage du nœud 1 en mode KRaft (`Kafka Server started`).*
 
 ### Étape 2 — Vérification du quorum KRaft
 
@@ -719,7 +725,9 @@ docker exec -it kafka1 /opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-serve
 
 **Résultat attendu** : `LeaderId` (contrôleur actif, l'un des nœuds 1, 2 ou 3), `CurrentVoters: [1,2,3]`, et pour chaque votant un `Lag` à 0 (ou très faible) dans la vue `--replication`.
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : sortie de `kafka-metadata-quorum.sh describe --status` montrant `ClusterId: 4L6g3nShT-eMCtK--X86sw`, `LeaderId`, `LeaderEpoch`, `HighWatermark` et `CurrentVoters` contenant les 3 nœuds.]**
+![Figure 3 — État du quorum KRaft : 3 votants, un contrôleur leader, retard des suiveurs nul.](captures/03_quorum_kraft.png)
+
+*Figure 3 — État du quorum KRaft : 3 votants, un contrôleur leader, retard des suiveurs nul.*
 
 ### Étape 3 — Création et inspection des topics
 
@@ -759,15 +767,23 @@ On observe que **les leaders sont répartis équitablement** sur les 3 brokers (
 
 > Lors de la création, Kafka affiche un avertissement : les topics contenant un point (`.`) ou un tiret bas (`_`) peuvent entrer en collision dans les noms de métriques. Il est sans conséquence ici, car la convention adoptée n'utilise que le point (`domaine.événement`).
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : sortie de `kafka-topics.sh --list` affichant `orders.created`, `orders.dlq`, `orders.fraud-alerts`, `perf.test` (et éventuellement `__consumer_offsets`).]**
+![Figure 4 — Topics créés par le script `create-topics.sh`.](captures/04_topics_list.png)
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : sortie de `kafka-topics.sh --describe --topic orders.created` montrant les 6 partitions, leur leader, leurs 3 répliques et un ISR complet.]**
+*Figure 4 — Topics créés par le script `create-topics.sh`.*
+
+![Figure 5 — Description du topic `orders.created` : 6 partitions, 3 répliques, leaders répartis et ISR complet.](captures/05_describe_orders_created.png)
+
+*Figure 5 — Description du topic `orders.created` : 6 partitions, 3 répliques, leaders répartis et ISR complet.*
 
 Ouvrir ensuite **Kafka UI** à l'adresse http://localhost:8080 :
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : Kafka UI, page « Brokers » du cluster `shopstream` montrant 3 brokers en ligne, le contrôleur actif, le nombre de partitions par broker.]**
+![Figure 6 — Kafka UI, page « Brokers » : 3 brokers en ligne, aucune partition sous-répliquée (URP = 0).](captures/06_ui_brokers.png)
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : Kafka UI, page « Topics » → `orders.created` → onglet « Overview » : 6 partitions, réplication 3, répartition des leaders.]**
+*Figure 6 — Kafka UI, page « Brokers » : 3 brokers en ligne, aucune partition sous-répliquée (URP = 0).*
+
+![Figure 7 — Kafka UI, topic `orders.created` : 6 partitions, facteur de réplication 3, 18 répliques synchrones sur 18.](captures/07_ui_topic_overview.png)
+
+*Figure 7 — Kafka UI, topic `orders.created` : 6 partitions, facteur de réplication 3, 18 répliques synchrones sur 18.*
 
 ### Étape 4 — Premier test publication/abonnement en ligne de commande
 
@@ -793,7 +809,9 @@ C00002:{"test":"message 3"}
 
 **Résultat attendu** : les messages apparaissent instantanément dans le terminal 1 ; les deux messages de `C00001` sont dans **la même partition** avec des offsets consécutifs. Quitter les deux terminaux avec `Ctrl+C`.
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : les deux terminaux côte à côte — à gauche le producteur console avec les 3 lignes saisies, à droite le consommateur affichant `Partition:X Offset:Y C00001 {"test":"message 1"}` ; mettre en évidence que les messages de C00001 partagent la même partition.]**
+![Figure 8 — Test publication/abonnement en console : les deux messages de la clé `C00001` arrivent dans la même partition, avec des offsets consécutifs (sortie du consommateur filtrée sur les 3 messages de test).](captures/08_console_pubsub.png)
+
+*Figure 8 — Test publication/abonnement en console : les deux messages de la clé `C00001` arrivent dans la même partition, avec des offsets consécutifs (sortie du consommateur filtrée sur les 3 messages de test).*
 
 > Ces messages de test ne respectent pas le schéma `OrderCreated` : ils seront logiquement envoyés en DLQ par le détecteur de fraude à l'étape 6 — ce qui constitue un premier test de robustesse.
 
@@ -844,15 +862,21 @@ python order_producer.py --rate 50 --count 6000
 - Analytique : toutes les 30 s, un tableau par catégorie (l'électronique domine le CA, la mode domine en nombre de commandes) et le top 3 des pays.
 - Terminal C : les alertes JSON apparaissent en temps réel.
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : vue en mosaïque des 4 terminaux pendant l'exécution — producteur (bilans périodiques), détecteur de fraude (lignes ALERTE et DLQ), analytique (tableau d'une fenêtre de 30 s), consommateur console des alertes (JSON).]**
+![Figure 9 — Pipeline complet en fonctionnement : producteur, détecteur de fraude (alertes et DLQ), analytique par fenêtres de 30 s et consommateur des alertes.](captures/09_pipeline_mosaique.png)
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : bilan final du producteur : `Total envoyés : 6000 | acquittés : 6000+ | erreurs : 0 | non livrés : 0` et la ligne `Répartition par partition : {0: ..., 1: ..., ..., 5: ...}`.]**
+*Figure 9 — Pipeline complet en fonctionnement : producteur, détecteur de fraude (alertes et DLQ), analytique par fenêtres de 30 s et consommateur des alertes.*
+
+![Figure 10 — Bilan du producteur : 6 000 messages envoyés et acquittés, aucune erreur, répartition homogène sur les 6 partitions.](captures/10_producteur_bilan.png)
+
+*Figure 10 — Bilan du producteur : 6 000 messages envoyés et acquittés, aucune erreur, répartition homogène sur les 6 partitions.*
 
 > Note : le total acquitté peut légèrement dépasser `--count` car une rafale envoie 5 messages d'un coup ; le compteur `sent` est vérifié entre deux itérations. Le débit effectif peut aussi être un peu inférieur au débit visé (`--rate`), à cause de la granularité de `time.sleep` sous Windows (44 msg/s obtenus pour 50 visés lors de la validation).
 
 > Au tout premier démarrage, des avertissements `Failed to acquire idempotence PID ... Coordinator load in progress: retrying` peuvent apparaître pendant quelques secondes : le coordinateur de transactions charge son topic interne. Ils sont transitoires et le client réessaie automatiquement.
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : tableau d'une fenêtre produit par `revenue_analytics.py` (catégories, nombre de commandes, CA, panier moyen, top pays).]**
+![Figure 11 — Fenêtres de 30 s calculées par `revenue_analytics.py` : commandes, chiffre d'affaires et panier moyen par catégorie, top 3 des pays.](captures/11_analytique_fenetre.png)
+
+*Figure 11 — Fenêtres de 30 s calculées par `revenue_analytics.py` : commandes, chiffre d'affaires et panier moyen par catégorie, top 3 des pays.*
 
 Inspection de la DLQ (avec les en-têtes d'erreur). On remarque que tous les messages corrompus proviennent de la **même partition** (la partition 5 lors de la validation) : le producteur leur attribue la clé constante `CORRUPTED`, et le hachage de la clé les envoie donc tous vers la même partition — illustration directe du partitionnement par clé.
 
@@ -860,11 +884,15 @@ Inspection de la DLQ (avec les en-têtes d'erreur). On remarque que tous les mes
 docker exec -it kafka1 /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server kafka1:19092 --topic orders.dlq --from-beginning --property print.headers=true --property print.key=true --timeout-ms 5000
 ```
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : contenu de `orders.dlq` montrant pour chaque message les en-têtes `error:Expecting value...` ou `error:champs manquants [...]`, `source.partition`, `source.offset`, la clé `CORRUPTED` et la valeur tronquée `{"order_id": "broken", "amount": `.]**
+![Figure 12 — Contenu de la DLQ `orders.dlq` : message brut corrompu et en-têtes de contexte (erreur, partition et offset d'origine, instance).](captures/12_dlq.png)
+
+*Figure 12 — Contenu de la DLQ `orders.dlq` : message brut corrompu et en-têtes de contexte (erreur, partition et offset d'origine, instance).*
 
 Visualisation dans Kafka UI d'un message réel :
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : Kafka UI → Topics → `orders.created` → onglet « Messages » : liste de messages avec clé (`C0xxxx`), partition, offset, horodatage et contenu JSON déplié d'une commande.]**
+![Figure 13 — Kafka UI, onglet « Messages » de `orders.created` : clé (`customer_id`), partition, offset, horodatage et contenu JSON d'une commande.](captures/13_ui_messages.png)
+
+*Figure 13 — Kafka UI, onglet « Messages » de `orders.created` : clé (`customer_id`), partition, offset, horodatage et contenu JSON d'une commande.*
 
 **Preuve du modèle publication/abonnement** : lister les groupes et vérifier que chaque groupe a consommé l'intégralité du topic de façon indépendante :
 
@@ -876,7 +904,9 @@ docker exec -it kafka1 /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-serve
 
 **Résultat attendu** : pour les deux groupes, `CURRENT-OFFSET` égal (ou très proche) de `LOG-END-OFFSET` sur chaque partition, donc **`LAG` ≈ 0** : chaque groupe a reçu **tous** les messages.
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : sorties `--describe` des groupes `fraud-detection` et `analytics` l'une sous l'autre, montrant les colonnes PARTITION, CURRENT-OFFSET, LOG-END-OFFSET, LAG (≈ 0), CONSUMER-ID et HOST.]**
+![Figure 14 — Groupes `fraud-detection` et `analytics` : chaque groupe a lu l'intégralité du topic (LAG = 0 sur toutes les partitions).](captures/14_groupes_lag.png)
+
+*Figure 14 — Groupes `fraud-detection` et `analytics` : chaque groupe a lu l'intégralité du topic (LAG = 0 sur toutes les partitions).*
 
 ### Étape 7 — Scalabilité horizontale et rééquilibrage
 
@@ -925,11 +955,17 @@ sequenceDiagram
     Note over A,B: A continue de traiter P0..P2 sans interruption (cooperative-sticky)
 ```
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : terminaux A, B et C juxtaposés montrant les messages `+ partitions ASSIGNÉES` et `- partitions RÉVOQUÉES` lors de l'arrivée de chaque nouvelle instance.]**
+![Figure 15 — Rééquilibrage coopératif lors de l'arrivée des instances B puis C : seules les partitions qui changent de propriétaire sont révoquées. Les affectations vides correspondent aux étapes incrémentales du protocole coopératif.](captures/15_rebalance_ABC.png)
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : `kafka-consumer-groups.sh --describe --group fraud-detection` avec 3 CONSUMER-ID différents détenant chacun 2 partitions, et le LAG avant (1 instance, lag croissant si saturée) / après (3 instances, lag résorbé).]**
+*Figure 15 — Rééquilibrage coopératif lors de l'arrivée des instances B puis C : seules les partitions qui changent de propriétaire sont révoquées. Les affectations vides correspondent aux étapes incrémentales du protocole coopératif.*
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : Kafka UI → Consumers → `fraud-detection` : membres du groupe, partitions affectées et graphique/valeur du lag par partition.]**
+![Figure 16 — Groupe `fraud-detection` avec 3 instances : chacune détient 2 partitions ; le lag résiduel correspond aux commandes en cours de traitement (commit toutes les 200 commandes ou 5 s).](captures/16_groupe_3_instances.png)
+
+*Figure 16 — Groupe `fraud-detection` avec 3 instances : chacune détient 2 partitions ; le lag résiduel correspond aux commandes en cours de traitement (commit toutes les 200 commandes ou 5 s).*
+
+![Figure 17 — Kafka UI, groupe `fraud-detection` : état STABLE, 3 membres, 6 partitions affectées.](captures/17_ui_consumer_group.png)
+
+*Figure 17 — Kafka UI, groupe `fraud-detection` : état STABLE, 3 membres, 6 partitions affectées.*
 
 ### Étape 8 — Tolérance aux pannes des brokers
 
@@ -957,11 +993,17 @@ docker exec -it kafka1 /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka1:
 - les consommateurs continuent de recevoir les messages ;
 - `kafka-metadata-quorum.sh describe --status` montre que le quorum reste opérationnel (2 votants sur 3 = majorité).
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : `kafka-topics.sh --describe` AVANT l'arrêt (ISR = 3 répliques) et APRÈS `docker stop kafka2` (nouveaux leaders, ISR réduit à 2 répliques), en surlignant une partition dont le leader est passé de 2 à 1 ou 3.]**
+![Figure 18 — Panne de `kafka2` : avant (ISR à 3 répliques) puis après l'arrêt (les partitions 1 et 3 changent de leader, ISR réduit à 1,3, partitions sous-répliquées).](captures/18_panne_describe.png)
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : terminal du producteur pendant la panne, montrant que les bilans continuent avec `erreurs=0`.]**
+*Figure 18 — Panne de `kafka2` : avant (ISR à 3 répliques) puis après l'arrêt (les partitions 1 et 3 changent de leader, ISR réduit à 1,3, partitions sous-répliquées).*
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : Kafka UI, page « Brokers » montrant 2 brokers en ligne sur 3 et des partitions « under-replicated ».]**
+![Figure 19 — Producteur à 300 msg/s pendant la panne de `kafka2` : les acquittements continuent sans aucune erreur.](captures/19_producteur_panne_1broker.png)
+
+*Figure 19 — Producteur à 300 msg/s pendant la panne de `kafka2` : les acquittements continuent sans aucune erreur.*
+
+![Figure 20 — Kafka UI pendant la panne : 2 brokers sur 3, 66 partitions sous-répliquées (URP), 132 répliques synchrones sur 198.](captures/20_ui_brokers_panne.png)
+
+*Figure 20 — Kafka UI pendant la panne : 2 brokers sur 3, 66 partitions sous-répliquées (URP), 132 répliques synchrones sur 198.*
 
 **8.3 — Panne d'un second broker** (perte de la majorité des répliques) :
 
@@ -971,7 +1013,9 @@ docker stop kafka3
 
 **Résultat attendu** : il ne reste qu'une réplique ; l'ISR (1) est **inférieur à `min.insync.replicas` (2)**. Le broker restant refuse les écritures `acks=all` : le compteur `acquittés` du producteur cesse immédiatement de progresser. Le client idempotent réessaie en interne (le broker répond `NOT_ENOUGH_REPLICAS`), puis, une fois `delivery.timeout.ms` (120 s) épuisé, chaque message non acquitté remonte en erreur : `KafkaError{code=_MSG_TIMED_OUT,val=-192,str="Local: Message timed out"}`. Lors de la validation, environ 2 min 20 s de panne ont produit 12 225 échecs de livraison — autant de messages **qui n'ont pas été écrits**, et que le producteur sait ne pas avoir été écrits. De plus, avec un seul contrôleur sur trois, le **quorum KRaft est perdu** : aucun changement de métadonnées n'est possible. Kafka privilégie ici la **cohérence** sur la disponibilité (choix CP au sens du théorème CAP) : **aucune donnée n'est acquittée sans être répliquée**.
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : terminal du producteur montrant le gel du compteur `acquittés` puis des messages `[ERREUR] livraison échouée : KafkaError{code=_MSG_TIMED_OUT,...,str="Local: Message timed out"}` environ 2 minutes après l'arrêt du second broker.]**
+![Figure 21 — Perte de deux brokers : le compteur d'acquittements se fige, puis les messages non acquittés échouent (`Local: Message timed out`) à l'expiration de `delivery.timeout.ms`.](captures/21_producteur_panne_2brokers.png)
+
+*Figure 21 — Perte de deux brokers : le compteur d'acquittements se fige, puis les messages non acquittés échouent (`Local: Message timed out`) à l'expiration de `delivery.timeout.ms`.*
 
 **8.4 — Rétablissement :**
 
@@ -992,7 +1036,9 @@ Arrêter enfin le producteur (`Ctrl+C`) et **vérifier l'absence de perte** : le
 docker exec -it kafka1 /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server kafka1:19092 --topic orders.created
 ```
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : `kafka-topics.sh --describe` après `docker start` montrant l'ISR à nouveau complet (3 répliques) sur toutes les partitions, puis la sortie de `kafka-get-offsets.sh` (offset de fin par partition).]**
+![Figure 22 — Après le redémarrage : ISR de nouveau complet sur les 6 partitions, et offsets de fin du topic.](captures/22_retablissement.png)
+
+*Figure 22 — Après le redémarrage : ISR de nouveau complet sur les 6 partitions, et offsets de fin du topic.*
 
 ### Étape 9 — Rejouabilité : retraitement de l'historique
 
@@ -1014,9 +1060,13 @@ docker exec -it kafka1 /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-serve
 
 3. Relancer `python revenue_analytics.py --window 30` : toutes les fenêtres historiques sont recalculées et publiées en rafale, **sans aucun impact** sur le groupe `fraud-detection`, dont les offsets restent inchangés.
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : sortie de `--reset-offsets --dry-run` puis `--execute` montrant NEW-OFFSET = 0 sur chaque partition ; puis `--describe --group analytics` avec un LAG égal à la totalité du topic juste avant la relance.]**
+![Figure 23 — Réinitialisation des offsets du groupe `analytics` (`--dry-run` puis `--execute`) : le lag devient égal à la totalité du topic.](captures/23_reset_offsets.png)
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : terminal de `revenue_analytics.py` affichant en rafale les fenêtres historiques recalculées ; et `--describe --group fraud-detection` montrant que ce groupe n'a pas été affecté.]**
+*Figure 23 — Réinitialisation des offsets du groupe `analytics` (`--dry-run` puis `--execute`) : le lag devient égal à la totalité du topic.*
+
+![Figure 24 — Rejeu de l'historique : les fenêtres passées sont recalculées en rafale ; les offsets du groupe `fraud-detection` ne sont pas remis à zéro (groupe non affecté).](captures/24_rejeu_analytics.png)
+
+*Figure 24 — Rejeu de l'historique : les fenêtres passées sont recalculées en rafale ; les offsets du groupe `fraud-detection` ne sont pas remis à zéro (groupe non affecté).*
 
 ### Étape 10 — Mesures de performance
 
@@ -1062,9 +1112,13 @@ P4   100000 records sent,  1998.9 records/sec (0.98 MB/sec), 9.08 ms avg latency
 C1  data.consumed.in.MB=976.75  MB.sec=33.43  data.consumed.in.nMsg=2000384  nMsg.sec=68473.5
 ```
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : ligne de résultat finale de chacun des tests P1, P2, P3 et P4 (records/sec, MB/sec, latence moyenne, max, percentiles 50/95/99/99.9).]**
+![Figure 25 — Résultats des bancs d'essai producteur P1 à P4.](captures/25_perf_producteur.png)
 
-> **[CAPTURE D'ÉCRAN À INSÉRER : résultat de `kafka-consumer-perf-test.sh` (colonnes `data.consumed.in.MB`, `MB.sec`, `data.consumed.in.nMsg`, `nMsg.sec`).]**
+*Figure 25 — Résultats des bancs d'essai producteur P1 à P4.*
+
+![Figure 26 — Résultat du banc d'essai consommateur C1.](captures/26_perf_consommateur.png)
+
+*Figure 26 — Résultat du banc d'essai consommateur C1.*
 
 ### Étape 11 — Arrêt et nettoyage
 
